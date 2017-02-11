@@ -43,6 +43,7 @@ import android.preference.Preference;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceScreen;
 import android.preference.Preference.OnPreferenceChangeListener;
+import android.preference.SwitchPreference;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.View;
@@ -198,6 +199,11 @@ public class SettingsActivity extends Activity {
                     return true;
                 }
             });
+
+            SwitchPreference leftTabPage = (SwitchPreference) findPreference(Utilities.SHOW_LEFT_TAB_PREFERENCE_KEY);
+            if (!isSearchInstalled()) {
+                getPreferenceScreen().removePreference(leftTabPage);
+            }
         }
 
         @Override
@@ -277,110 +283,114 @@ public class SettingsActivity extends Activity {
                 return null;
             }
         }
-    }
 
-    /**
-     * Content observer which listens for system badging setting changes,
-     * and updates the launcher badging setting subtext accordingly.
-     */
-    private static class IconBadgingObserver extends SettingsObserver.Secure
-            implements Preference.OnPreferenceClickListener {
-
-        private final ButtonPreference mBadgingPref;
-        private final ContentResolver mResolver;
-        private final FragmentManager mFragmentManager;
-
-        public IconBadgingObserver(ButtonPreference badgingPref, ContentResolver resolver,
-                FragmentManager fragmentManager) {
-            super(resolver);
-            mBadgingPref = badgingPref;
-            mResolver = resolver;
-            mFragmentManager = fragmentManager;
+        private boolean isSearchInstalled() {
+                return Utilities.isPackageInstalled(getActivity(), LauncherTab.SEARCH_PACKAGE);
         }
 
-        @Override
-        public void onSettingChanged(boolean enabled) {
-            int summary = enabled ? R.string.icon_badging_desc_on : R.string.icon_badging_desc_off;
+        /**
+         * Content observer which listens for system badging setting changes,
+         * and updates the launcher badging setting subtext accordingly.
+         */
+        private static class IconBadgingObserver extends SettingsObserver.Secure
+                implements Preference.OnPreferenceClickListener {
 
-            boolean serviceEnabled = true;
-            if (enabled) {
-                // Check if the listener is enabled or not.
-                String enabledListeners =
-                        Settings.Secure.getString(mResolver, NOTIFICATION_ENABLED_LISTENERS);
-                ComponentName myListener =
-                        new ComponentName(mBadgingPref.getContext(), NotificationListener.class);
-                serviceEnabled = enabledListeners != null &&
-                        (enabledListeners.contains(myListener.flattenToString()) ||
-                                enabledListeners.contains(myListener.flattenToShortString()));
-                if (!serviceEnabled) {
-                    summary = R.string.title_missing_notification_access;
-                }
+            private final ButtonPreference mBadgingPref;
+            private final ContentResolver mResolver;
+            private final FragmentManager mFragmentManager;
+
+            public IconBadgingObserver(ButtonPreference badgingPref, ContentResolver resolver,
+                    FragmentManager fragmentManager) {
+                super(resolver);
+                mBadgingPref = badgingPref;
+                mResolver = resolver;
+                mFragmentManager = fragmentManager;
             }
-            mBadgingPref.setWidgetFrameVisible(!serviceEnabled);
-            mBadgingPref.setOnPreferenceClickListener(serviceEnabled ? null : this);
-            mBadgingPref.setSummary(summary);
 
-        }
-
-        @Override
-        public boolean onPreferenceClick(Preference preference) {
-            new NotificationAccessConfirmation().show(mFragmentManager, "notification_access");
-            return true;
-        }
-    }
-
-    public static class NotificationAccessConfirmation
-            extends DialogFragment implements DialogInterface.OnClickListener {
-
-        @Override
-        public Dialog onCreateDialog(Bundle savedInstanceState) {
-            final Context context = getActivity();
-            String msg = context.getString(R.string.msg_missing_notification_access,
-                    context.getString(R.string.derived_app_name));
-            return new AlertDialog.Builder(context)
-                    .setTitle(R.string.title_missing_notification_access)
-                    .setMessage(msg)
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton(R.string.title_change_settings, this)
-                    .create();
-        }
-
-        @Override
-        public void onClick(DialogInterface dialogInterface, int i) {
-            ComponentName cn = new ComponentName(getActivity(), NotificationListener.class);
-            Bundle showFragmentArgs = new Bundle();
-            showFragmentArgs.putString(EXTRA_FRAGMENT_ARG_KEY, cn.flattenToString());
-
-            Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(EXTRA_FRAGMENT_ARG_KEY, cn.flattenToString())
-                    .putExtra(EXTRA_SHOW_FRAGMENT_ARGS, showFragmentArgs);
-            getActivity().startActivity(intent);
-        }
-    }
-
-    public static void restart(final Context context) {
-        ProgressDialog.show(context, null, context.getString(R.string.state_loading), true, false);
-        new LooperExecutor(LauncherModel.getWorkerLooper()).execute(new Runnable() {
             @Override
-            public void run() {
-                try {
-                    Thread.sleep(WAIT_BEFORE_RESTART);
-                } catch (Exception e) {
-                    Log.e("SettingsActivity", "Error waiting", e);
+            public void onSettingChanged(boolean enabled) {
+                int summary = enabled ? R.string.icon_badging_desc_on : R.string.icon_badging_desc_off;
+
+                boolean serviceEnabled = true;
+                if (enabled) {
+                    // Check if the listener is enabled or not.
+                    String enabledListeners =
+                            Settings.Secure.getString(mResolver, NOTIFICATION_ENABLED_LISTENERS);
+                    ComponentName myListener =
+                            new ComponentName(mBadgingPref.getContext(), NotificationListener.class);
+                    serviceEnabled = enabledListeners != null &&
+                            (enabledListeners.contains(myListener.flattenToString()) ||
+                                    enabledListeners.contains(myListener.flattenToShortString()));
+                    if (!serviceEnabled) {
+                        summary = R.string.title_missing_notification_access;
+                    }
                 }
+                mBadgingPref.setWidgetFrameVisible(!serviceEnabled);
+                mBadgingPref.setOnPreferenceClickListener(serviceEnabled ? null : this);
+                mBadgingPref.setSummary(summary);
 
-                Intent intent = new Intent(Intent.ACTION_MAIN)
-                        .addCategory(Intent.CATEGORY_HOME)
-                        .setPackage(context.getPackageName())
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-                PendingIntent pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_ONE_SHOT);
-                AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-                alarmManager.setExact(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 50, pendingIntent);
-
-                android.os.Process.killProcess(android.os.Process.myPid());
             }
-        });
+
+            @Override
+            public boolean onPreferenceClick(Preference preference) {
+                new NotificationAccessConfirmation().show(mFragmentManager, "notification_access");
+                return true;
+            }
+        }
+
+        public static class NotificationAccessConfirmation
+                extends DialogFragment implements DialogInterface.OnClickListener {
+
+            @Override
+            public Dialog onCreateDialog(Bundle savedInstanceState) {
+                final Context context = getActivity();
+                String msg = context.getString(R.string.msg_missing_notification_access,
+                        context.getString(R.string.derived_app_name));
+                return new AlertDialog.Builder(context)
+                        .setTitle(R.string.title_missing_notification_access)
+                        .setMessage(msg)
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .setPositiveButton(R.string.title_change_settings, this)
+                        .create();
+            }
+
+            @Override
+            public void onClick(DialogInterface dialogInterface, int i) {
+                ComponentName cn = new ComponentName(getActivity(), NotificationListener.class);
+                Bundle showFragmentArgs = new Bundle();
+                showFragmentArgs.putString(EXTRA_FRAGMENT_ARG_KEY, cn.flattenToString());
+
+                Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .putExtra(EXTRA_FRAGMENT_ARG_KEY, cn.flattenToString())
+                        .putExtra(EXTRA_SHOW_FRAGMENT_ARGS, showFragmentArgs);
+                getActivity().startActivity(intent);
+            }
+        }
+
+        public static void restart(final Context context) {
+            ProgressDialog.show(context, null, context.getString(R.string.state_loading), true, false);
+            new LooperExecutor(LauncherModel.getWorkerLooper()).execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Thread.sleep(WAIT_BEFORE_RESTART);
+                    } catch (Exception e) {
+                        Log.e("SettingsActivity", "Error waiting", e);
+                    }
+
+                    Intent intent = new Intent(Intent.ACTION_MAIN)
+                            .addCategory(Intent.CATEGORY_HOME)
+                            .setPackage(context.getPackageName())
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+                    PendingIntent pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_ONE_SHOT);
+                    AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+                    alarmManager.setExact(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 50, pendingIntent);
+
+                    android.os.Process.killProcess(android.os.Process.myPid());
+                }
+            });
+        }
     }
 }
