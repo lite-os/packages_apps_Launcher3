@@ -61,7 +61,7 @@ public abstract class BaseDraggingActivity extends BaseActivity
 
     private OnStartCallback mOnStartCallback;
 
-    private int mThemeRes = R.style.LauncherTheme;
+    private int mThemeRes = R.style.AppTheme;
 
     private DisplayRotationListener mRotationListener;
 
